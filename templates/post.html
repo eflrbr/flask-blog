@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+
+{% block content %}
+  <h1>{{ post['title'] }}</h1>
+  <p>{{ post['created'] }}</p>
+  <div>{{ post['content'] }}</div>
+
+  <p>
+    <a href="{{ url_for('edit', post_id=post['id']) }}">Edit</a>
+    <form action="{{ url_for('delete', post_id=post['id']) }}" method="post" style="display:inline">
+      <button type="submit">Delete</button>
+    </form>
+  </p>
+{% endblock %}

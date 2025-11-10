@@ -1,33 +1,84 @@
 import sqlite3
 from flask import Flask, render_template, request, url_for, flash, redirect, abort
 
-# make a Flask application object called app
 app = Flask(__name__)
 app.config["DEBUG"] = True
+app.config['SECRET_KEY'] = 'dev'   # change this for production
 
+DB_PATH = "database.db"
 
-
-# Function to open a connection to the database.db file
 def get_db_connection():
-    # create connection to the database
-    conn = sqlite3.connect('database.db')
-    
-    # allows us to have name-based access to columns
-    # the database connection will return rows we can access like regular Python dictionaries
+    conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-
-    #return the connection object
     return conn
 
+def get_post(post_id):
+    conn = get_db_connection()
+    post = conn.execute('SELECT * FROM posts WHERE id = ?', (post_id,)).fetchone()
+    conn.close()
+    if post is None:
+        abort(404)
+    return post
 
-# use the app.route() decorator to create a Flask view function called index()
 @app.route('/')
 def index():
-    
-    return "<h1>Welcome to My Blog</h1>"
+    conn = get_db_connection()
+    posts = conn.execute('SELECT * FROM posts ORDER BY created DESC').fetchall()
+    conn.close()
+    return render_template('index.html', posts=posts)
 
+@app.route('/create', methods=('GET', 'POST'))
+def create():
+    if request.method == 'POST':
+        title = request.form.get('title', '').strip()
+        content = request.form.get('content', '').strip()
 
-# route to create a post
+        if not title:
+            flash('Title is required!')
+            return render_template('create.html')
 
+        conn = get_db_connection()
+        conn.execute('INSERT INTO posts (title, content) VALUES (?, ?)', (title, content))
+        conn.commit()
+        conn.close()
+        return redirect(url_for('index'))
 
-app.run()
+    return render_template('create.html')
+
+@app.route('/post/<int:post_id>')
+def post(post_id):
+    post = get_post(post_id)
+    return render_template('post.html', post=post)
+
+@app.route('/edit/<int:post_id>', methods=('GET', 'POST'))
+def edit(post_id):
+    post = get_post(post_id)
+
+    if request.method == 'POST':
+        title = request.form.get('title', '').strip()
+        content = request.form.get('content', '').strip()
+
+        if not title:
+            flash('Title is required!')
+            return render_template('edit.html', post=post)
+
+        conn = get_db_connection()
+        conn.execute('UPDATE posts SET title = ?, content = ? WHERE id = ?', (title, content, post_id))
+        conn.commit()
+        conn.close()
+        return redirect(url_for('post', post_id=post_id))
+
+    return render_template('edit.html', post=post)
+
+@app.route('/delete/<int:post_id>', methods=('POST',))
+def delete(post_id):
+    get_post(post_id)  # 404 if not found
+    conn = get_db_connection()
+    conn.execute('DELETE FROM posts WHERE id = ?', (post_id,))
+    conn.commit()
+    conn.close()
+    flash(f'Post {post_id} was successfully deleted.')
+    return redirect(url_for('index'))
+
+if __name__ == '__main__':
+    app.run()
